@@ -11,9 +11,32 @@ def load_data(path):
 def plot_data():
     pass
 
+def initialize_theta(D): 
+  return np.zeros([D, 1])
+
+def lin_func(X, theta):
+  assert X.ndim > 1
+  assert theta.ndim > 1
+  return np.dot(X, theta)
+
+def batch_gradient(X, y, theta):
+  return -2.0 * np.dot(X.T, (y - lin_func(X, theta)))
+
+def update_function(theta, grads, step_size):
+  return theta - step_size * grads
 
 def GD_batch(X, y, learning_rate=0.01, num_iterations=1000):
-    pass
+    N, D = X.shape
+    theta = initialize_theta(D)
+    losses = []
+    for _ in range(num_iterations): 
+        ypred = lin_func(X, theta)
+        loss = calculate_mse(y, ypred) 
+        grads = batch_gradient(X, y, theta)
+        theta = update_function(theta, grads, learning_rate)
+        
+        losses.append(loss)
+    return losses
 
 
 def GD_stochastic(X, y, learning_rate=0.01, num_iterations=1000):
@@ -21,7 +44,9 @@ def GD_stochastic(X, y, learning_rate=0.01, num_iterations=1000):
 
 
 def normal_equation(X, y):
-    pass
+    # pitala chatpgt - proveriti
+    theta = np.linalg.inv(X.T.dot(X)).dot(X.T).dot(y)
+    return theta
 
 
 def train_model(X, y, method, learning_rate=0.01, num_iterations=1000):
