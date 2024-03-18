@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sys
+from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
 
@@ -19,8 +20,8 @@ def initialize_theta(D):
   return np.zeros([D, 1])
 
 def lin_func(X, theta):
-  assert X.ndim > 1
-  assert theta.ndim > 1
+#   assert X.ndim > 1
+#   assert theta.ndim > 1
   return np.dot(X, theta)
 
 def batch_gradient(X, y, theta):
@@ -29,9 +30,13 @@ def batch_gradient(X, y, theta):
 def update_function(theta, grads, step_size):
   return theta - step_size * grads
 
+
+def calculate_mse(predictions, targets):
+    return np.mean((predictions - targets) ** 2)
+
+
 def GD_batch(X, y, learning_rate=0.01, num_iterations=1000):
-    N, D = X.shape
-    theta = initialize_theta(D)
+    theta = initialize_theta(1)
     losses = []
     for _ in range(num_iterations): 
         ypred = lin_func(X, theta)
@@ -62,10 +67,6 @@ def train_model(X, y, method, learning_rate=0.01, num_iterations=1000):
         return normal_equation(X, y)
     else:
         return None
-
-
-def calculate_mse(predictions, targets):
-    return np.mean((predictions - targets) ** 2)
 
 
 def normalize_data(data, method):   # Multiple types of normalization; add more?
@@ -102,29 +103,46 @@ def main(path):
     X = data['X'].values.reshape(-1, 1)  
     Y = data['Y'].values
 
-    plot_data(X, Y)
+    # plot_data(X, Y)
+    print(X)
+    print(X.shape)
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
     
-    optimization_algorithms = [GD_batch, GD_stochastic]
+    optimization_algorithms = ['GD_batch', 'GD_stochastic']
     normalization_methods = ['min-max', 'z-score', 'log']
     outlier_handling_methods = ['remove', 'z-score', 'log', 'mean', 'robust-regression']
     results = []
 
-    for opt_algo in optimization_algorithms:
-        for norm_method in normalization_methods:
-            for outlier_method in outlier_handling_methods:
+    # for opt_algo in optimization_algorithms:
+    #     for norm_method in normalization_methods:
+    #         for outlier_method in outlier_handling_methods:
                 
-                normalized_X = normalize_data("", norm_method)
-                cleaned_X = handle_outliers(normalized_X, outlier_method)
+    normalized_X_train = normalize_data(X_train, 'min-max')
+    cleaned_X_train = handle_outliers(normalized_X_train, 'z-score').reshape(-1, 1)
 
-                predictions = train_model()
-                mse = calculate_mse(predictions, Y)
+    print("TEMP: ", cleaned_X_train.shape, Y_train.shape)
+    predictions_train = train_model(cleaned_X_train, Y_train, 'GD_batch')
+    mse_train = calculate_mse(predictions_train, Y_train)
 
-                results.append({
-                    'Optimization Algorithm': opt_algo.__name__,
-                    'Normalization Method': norm_method,
-                    'Outlier Handling Method': outlier_method,
-                    'MSE': mse
-                })
+    results.append({
+        'Optimization Algorithm': 'GD_batch',
+        'Normalization Method': 'min-max',
+        'Outlier Handling Method': 'z-score',
+        'MSE Train': mse_train
+    })
+
+    normalized_X_test = normalize_data(X_test, 'min-max')
+    cleaned_X_test = handle_outliers(normalized_X_test, 'z-score')
+
+    predictions_test = train_model(cleaned_X_test, Y_test, 'GD_batch')
+    mse_test = calculate_mse(predictions_test, Y_test)
+
+    results.append({
+        'Optimization Algorithm': 'GD_batch',
+        'Normalization Method': 'min-max',
+        'Outlier Handling Method': 'z-score',
+        'MSE Test': mse_test
+    })
 
     
     results_df = pd.DataFrame(results)
@@ -135,5 +153,6 @@ def main(path):
 
 
 if __name__ == "__main__":
-    path = sys.argv[1]
+    # path = sys.argv[1]
+    path = "data/train.csv"
     main(path)
