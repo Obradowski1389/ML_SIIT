@@ -99,5 +99,3 @@ def main(train_path, test_path):
 
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2])
-
-
