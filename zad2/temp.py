@@ -86,6 +86,7 @@ def main(train_path, test_path):
     df = pd.concat([train, test])
 
     train = train[train['Godina proizvodnje'] >= 1900]
+    train = train[train['Cena'] <= 63000]
     train.drop_duplicates(inplace=True)
     train.reset_index(drop=True, inplace=True)
 
@@ -101,15 +102,30 @@ def main(train_path, test_path):
     y_test = test['Cena']
     X_test = test.drop(columns= ['Cena', 'Grad'], axis=1)
     
-    # for i in range(1, 30):
-    knn = KNNRegressor(k=8, dist=KNNRegressor.euclidean_distance)
+    knn = KNNRegressor(k=10, dist=KNNRegressor.euclidean_distance)
     knn.fit(X_train.values, y_train.values)
     y_pred = knn.predict(X_test.values)
-    print(f'{calculate_rmse(y_test, y_pred)}')
+    return calculate_rmse(y_test, y_pred)
 
     
 
 
 if __name__ == "__main__":
     # main("data/train.tsv", "data/test.tsv")
-    main(sys.argv[1], sys.argv[2])
+
+    # min_rmse = math.inf
+    # best_k = 0
+    # best_price = 0
+    #cena
+    # for i in range(40000, 70000, 1000):
+    #     #k
+    #     for j in range(1, 30):
+    rmse = main(sys.argv[1], sys.argv[2])
+            # print(rmse)
+            # if rmse < min_rmse:
+            #     min_rmse = rmse
+            #     best_k = j
+            #     best_price = i
+    # print(f'Min RMSE: {min_rmse}, best k: {best_k}, best price: {best_price}')
+    print(rmse)
+
