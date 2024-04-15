@@ -1,9 +1,8 @@
-import numpy as np
 import pandas as pd
-import operator
-from functools import reduce
-from math import sqrt
-import matplotlib.pyplot as plt
+import numpy as np
+import sys
+
+df = None
 
 
 class KNNRegressor:
@@ -29,23 +28,46 @@ class KNNRegressor:
     
     @staticmethod
     def euclidean_distance(x, y):
-        return sqrt(reduce(operator.add, map(lambda a, b: (a - b) ** 2, x, y)))
+        sum_squared_diff = 0.0
+
+        for i in range(len(x)):
+            sum_squared_diff += (x[i] - y[i]) ** 2
+
+        return sum_squared_diff ** 0.5
     
 
-def label_encode(train_data, test_data):
-    label_mappings = {}
-    
-    categorical_columns = ['Marka', 'Grad']
-    for column in categorical_columns:
-        categories = sorted(pd.concat([train_data[column], test_data[column]]).unique())
-    
-        label_map = {category: i for i, category in enumerate(categories)}
-        label_mappings[column] = label_map
-        
-        train_data[column] = train_data[column].map(label_map)
-        test_data[column] = test_data[column].map(label_map)
-    
-    return train_data, test_data
+def encode(train, test):
+    global df
+
+    nominal = {
+        'Karoserija': df['Karoserija'].unique(),
+        'Gorivo': df['Gorivo'].unique(),
+        'Marka': df['Marka'].unique(),
+    }
+
+    # label encoding for binary
+    train['Menjac'] = train['Menjac'].map({'Manuelni': 0, 'Automatski': 1})
+    test['Menjac'] = test['Menjac'].map({'Manuelni': 0, 'Automatski': 1})
+    # one hot encoding for nominal
+    for col in nominal:
+        for category in nominal[col]:
+            train[category] = (train[col] == category).astype(int)
+            test[category] = (test[col] == category).astype(int)
+        train.drop(col, axis=1, inplace=True)
+        test.drop(col, axis=1, inplace=True)
+
+    return train, test
+
+
+def normalize(train, test, numerical_columns):
+    for col in numerical_columns:
+        if col == 'Cena':
+            continue
+        mean = train[col].mean()
+        std = train[col].std()
+        train[col] = (train[col] - mean) / std
+        test[col] = (test[col] - mean) / std
+    return train, test
 
 
 def calculate_rmse(y_true, y_pred):
@@ -55,97 +77,39 @@ def calculate_rmse(y_true, y_pred):
     rmse = np.sqrt(mean_squared_residuals)
     return rmse
 
-def feature_normalization(data, binary, nominal, range_cols=None, norm_params=[], feature_to_predict='Cena'):
-    if range_cols is None:
-        range_cols = [col for col in data.columns.values if col not in list(binary.keys()) + list(nominal.keys()) + [feature_to_predict]]
 
-    rp_initialized = len(norm_params) != 0
+def main(train_path, test_path):
+    global df
+    train = pd.read_csv(train_path, sep='\t')
+    test = pd.read_csv(test_path, sep='\t')
 
-    # Normalization of features whose values are in some range
-    for i in range(len(range_cols)):
-        col_name = range_cols[i]
-        col_values = data[col_name]
+    df = pd.concat([train, test])
 
-        if not rp_initialized:
-            median = np.median(col_values)
-            std = np.std(col_values)
-            norm_params.append((median, std))
-        else:
-            median = norm_params[i][0]
-            std = norm_params[i][1]
+    train = train[train['Godina proizvodnje'] >= 1900]
+    train.drop_duplicates(inplace=True)
+    train.reset_index(drop=True, inplace=True)
 
-        data[col_name] = (col_values - median) / std
+    numerical_columns = df.select_dtypes(exclude=object).columns.tolist()
+    numerical_columns.remove('Cena')
 
-    # Set binary feature values from string to 0 or 1
-    for col_name, bin_values in binary.items():
-        data[col_name] = data[col_name].map({bin_values[0]: 1, bin_values[1]: 0})
+    train, test = normalize(train, test, numerical_columns)
 
-    # Create new feature for every category from nominal feature
-    for col_name in nominal:
-        for cat in nominal[col_name]:
-            data[cat] = list(map(lambda x: int(x == cat), data[col_name]))
+    train, test = encode(train, test)
 
-        data.drop(col_name, axis=1, inplace=True)
-
-    # Set column to be predicted at the last position
-    y_values = data[feature_to_predict]
-    data.drop(feature_to_predict, axis=1, inplace=True)
-    data[feature_to_predict] = y_values
-
-    return data
-
-
-def plot_expected_vs_predicted(y_expected, y_predicted):
-    plt.figure(figsize=(8, 6))
-    plt.scatter(y_expected, y_predicted, color='blue', alpha=0.5)
-    plt.plot([min(y_expected), max(y_expected)], [min(y_expected), max(y_expected)], color='red', linestyle='--')
-    plt.title('Expected vs Predicted Prices')
-    plt.xlabel('Expected Price')
-    plt.ylabel('Predicted Price')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-
-def main(train_path, test_path, k):
-    selected_features = ["Marka", "Grad", "Cena", "Godina proizvodnje", "Karoserija", "Gorivo", "Zapremina motora", "Kilometraza", "Konjske snage", "Menjac"]
-    train_data = pd.read_csv(train_path, sep='\t')
-    test_data = pd.read_csv(test_path, sep='\t')
-
-    train_data, test_data = label_encode(train_data, test_data) # Samo Marka i Grad
-
-    binary_features = {
-        'Menjac': ['Manuelni', 'Automatski'],
-    }
-
-    nominal_features = {
-        'Karoserija': ["Hečbek", "Limuzina", "Karavan", "Džip/SUV", "Monovolumen (MiniVan)", "Kupe", "Kabriolet/Roadster", "Pickup"],
-        'Gorivo': ["Dizel", "Benzin", "Benzin + Gas (TNG)", "Benzin + Metan (CNG)", "Hibridni pogon", "Hibridni pogon (Dizel)", "Hibridni pogon (Benzin)"],
-    }
+    y_train = train['Cena']
+    X_train = train.drop(columns= ['Cena', 'Grad'], axis=1)
+    y_test = test['Cena']
+    X_test = test.drop(columns= ['Cena', 'Grad'], axis=1)
+    
+    # for i in range(1, 30):
+    knn = KNNRegressor(k=8, dist=KNNRegressor.euclidean_distance)
+    knn.fit(X_train.values, y_train.values)
+    y_pred = knn.predict(X_test.values)
+    print(f'{calculate_rmse(y_test, y_pred)}')
 
     
-    norm_params = []
-    train_data = feature_normalization(train_data, binary=binary_features, nominal=nominal_features, norm_params=norm_params)
-    test_data = feature_normalization(test_data, binary=binary_features, nominal=nominal_features, norm_params=norm_params)
 
-    y_train = train_data['Cena']
-    X_train = train_data
-    # X_train = train_data.drop(columns=['Grad', 'Gorivo'])
-    y_test = test_data['Cena']
-    X_test = test_data
-    # X_test = test_data.drop(columns=['Grad', 'Gorivo'])
 
-    knn = KNNRegressor(k=k, dist=KNNRegressor.euclidean_distance)
-
-    knn.fit(X_train.values.tolist(), y_train.values.tolist())
-    y_pred = knn.predict(X_test.values.tolist())
-    
-    plot_expected_vs_predicted(y_test, y_pred)
-    rmse = calculate_rmse(y_test, y_pred)
-    print("K: ", k, " : ", rmse)
-    
-    
-if __name__ == '__main__':
-    # main(sys.argv[1], sys.argv[2])
-    # for i in range(1, 25):
-    main("data/train.tsv", "data/test.tsv", 1)
+if __name__ == "__main__":
+    # main("data/train.tsv", "data/test.tsv")
+    main(sys.argv[1], sys.argv[2])
