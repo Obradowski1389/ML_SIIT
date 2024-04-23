@@ -4,6 +4,8 @@ from sklearn.svm import SVC
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import classification_report
 from sklearn.metrics import f1_score
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
 
 
 stop_words = ['a', 'avaj', 'ako', 'al', 'ali', 'arh', 'au', 'ah', 'aha', 'aj', 'bar', 'bi', 'bila', 'bili', 'bilo', 'bismo', 'biste', 'bih', 'bijasmo', 'bijaste', 'bijah', 'bijahu', 'bijaše', 'biće', 'blizu', 'broj', 'brr', 'bude', 'budimo', 'budite', 'budu', 'budući', 'bum', 'buć', 'vam', 'vama', 'vas', 'vaša', 'vaše', 'vašim', 'vašima', 'valjda', 'veoma', 'verovatno', 'već', 'većina', 'vi', 'video', 'više', 'vrlo', 'vrh', 'ga', 'gde', 'gic', 'god', 'gore', 'gđekoje', 'da', 'dakle', 'dana', 'danas', 'daj', 'dva', 'de', 'deder', 'delimice', 'delimično', 'dem', 'do', 'dobar', 'dobiti', 'dovečer', 'dokle', 'dole', 'donekle', 'dosad', 'doskoro', 'dotad', 'dotle', 'došao', 'doći', 'drugamo', 'drugde', 'drugi', 'e', 'evo', 'eno', 'eto', 'eh', 'ehe', 'ej', 'želela', 'želele', 'želeli', 'želelo', 'želeh', 'želeći', 'želi', 'za', 'zaista', 'zar', 'zatim', 'zato', 'zahvaliti', 'zašto', 'zbilja', 'zimus', 'znati', 'zum', 'i', 'ide', 'iz', 'izvan', 'izvoli', 'između', 'iznad', 'ikada', 'ikakav', 'ikakva', 'ikakve', 'ikakvi', 'ikakvim', 'ikakvima', 'ikakvih', 'ikakvo', 'ikakvog', 'ikakvoga', 'ikakvom', 'ikakvome', 'ikakvoj', 'ili', 'im', 'ima', 'imam', 'imao', 'ispod', 'ih', 'iju', 'ići', 'kad', 'kada', 'koga', 'kojekakav', 'kojima', 'koju', 'krišom', 'lani', 'li', 'mali', 'manji', 'me', 'mene', 'meni', 'mi', 'mimo', 'misli', 'mnogo', 'mogu', 'mora', 'morao', 'moj', 'moja', 'moje', 'moji', 'moju', 'moći', 'mu', 'na', 'nad', 'nakon', 'nam', 'nama', 'nas', 'naša', 'naše', 'našeg', 'naši', 'naći', 'ne', 'negde', 'neka', 'nekad', 'neke', 'nekog', 'neku', 'nema', 'nemam', 'neko', 'neće', 'nećemo', 'nećete', 'nećeš', 'neću', 'ni', 'nikada', 'nikoga', 'nikoje', 'nikoji', 'nikoju', 'nisam', 'nisi', 'niste', 'nisu', 'ništa', 'nijedan', 'no', 'o', 'ova', 'ovako', 'ovamo', 'ovaj', 'ovde', 'ove', 'ovim', 'ovima', 'ovo', 'ovoj', 'od', 'odmah', 'oko', 'okolo', 'on', 'onaj', 'one', 'onim', 'onima', 'onom', 'onoj', 'onu', 'osim', 'ostali', 'otišao', 'pa', 'pak', 'pitati', 'po', 'povodom', 'pod', 'podalje', 'poželjan', 'poželjna', 'poizdalje', 'poimence', 'ponekad', 'popreko', 'pored', 'posle', 'potaman', 'potrbuške', 'pouzdano', 'početak', 'pojedini', 'praviti', 'prvi', 'preko', 'prema', 'prije', 'put', 'pljus', 'radije', 's', 'sa', 'sav', 'sada', 'sam', 'samo', 'sasvim', 'sva', 'svaki', 'svi', 'svim', 'svog', 'svom', 'svoj', 'svoja', 'svoje', 'svoju', 'svu', 'svugde', 'se', 'sebe', 'sebi', 'si', 'smeti', 'smo', 'stvar', 'stvarno', 'ste', 'su', 'sutra', 'ta', 'taèno', 'tako', 'takođe', 
@@ -47,21 +49,35 @@ def preprocess_and_split(train_data, test_data):
     # return X_train, X_test, [sample['zanr'] for sample in train_data], [sample['zanr'] for sample in test_data]
 
 
+def print_result(y_test, y_pred, classifier_name):
+    print("Izvestaj klasifikacije za: " + classifier_name)
+    print(classification_report(y_test, y_pred))
+    micro_f1 = f1_score(y_test, y_pred, average='micro')
+    print("Mikro F1 mera:", micro_f1)
+    print("*" * 50)
+
+
 def main(train_path, test_path):
     train_data = load_data(train_path)
     test_data = load_data(test_path)
 
     X_train, X_test, y_train, y_test = preprocess_and_split(train_data, test_data)
+    
     svm_classifier = SVC(kernel='linear', random_state=42)
-
     svm_classifier.fit(X_train, y_train)
-
     y_pred = svm_classifier.predict(X_test)
+    print_result(y_test, y_pred, "SVM")
 
-    print(classification_report(y_test, y_pred))
+    nb_classifier = MultinomialNB()
+    nb_classifier.fit(X_train, y_train)
+    y_pred = nb_classifier.predict(X_test)
+    print_result(y_test, y_pred, "Naive Bayes")
 
-    micro_f1 = f1_score(y_test, y_pred, average='micro')
-    print("Mikro F1 mera:", micro_f1)
+    logistic_regression = LogisticRegression(random_state=42, max_iter=1000)
+    logistic_regression.fit(X_train, y_train)
+    y_pred = logistic_regression.predict(X_test)
+
+    print_result(y_test, y_pred, "Logistic Regression")
     
 
 if __name__ == "__main__":
