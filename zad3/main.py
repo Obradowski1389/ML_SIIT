@@ -34,15 +34,17 @@ def preprocess_and_split(train_data, test_data):
     train_texts = [preprocess_text(sample['strofa']) for sample in train_data]
     test_texts = [preprocess_text(sample['strofa']) for sample in test_data]
     
+    # TFIDF
     tfidf_vectorizer = TfidfVectorizer()
 
     tfidf_train_matrix = tfidf_vectorizer.fit_transform(train_texts)
     tfidf_test_matrix = tfidf_vectorizer.transform(test_texts)
 
-    print("Dimenzije TF-IDF matrice trening podataka:", tfidf_train_matrix.shape)
-    print("Dimenzije TF-IDF matrice test podataka:", tfidf_test_matrix.shape)
+    # print("Dimenzije TF-IDF matrice trening podataka:", tfidf_train_matrix.shape)
+    # print("Dimenzije TF-IDF matrice test podataka:", tfidf_test_matrix.shape)
     return tfidf_train_matrix, tfidf_test_matrix, [sample['zanr'] for sample in train_data], [sample['zanr'] for sample in test_data]
     
+    # Bag of words
     # vectorizer = CountVectorizer()
     # X_train = vectorizer.fit_transform(train_texts)
     # X_test = vectorizer.transform(test_texts)
