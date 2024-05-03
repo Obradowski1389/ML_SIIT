@@ -23,7 +23,7 @@ def preprocess_text(text):
     text = text.translate(str.maketrans('', '', string.punctuation))
     tokens = text.split()
     
-    tokens = [word for word in tokens if word not in stop_words]
+    #tokens = [word for word in tokens if word not in stop_words]
     
     preprocessed_text = ' '.join(tokens)
     
