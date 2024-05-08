@@ -1,32 +1,7 @@
-from scipy import stats
-import pandas as pd
 import numpy as np
-
-
-class RandomForestRegressor:
-    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1):
-        self.n_estimators = n_estimators
-        self.max_depth = max_depth
-        self.min_samples_split = min_samples_split
-        self.min_samples_leaf = min_samples_leaf
-        self.trees = []
-
-    def fit(self, X, y):
-        n_samples, n_features = X.shape
-        for _ in range(self.n_estimators):
-            indices = np.random.choice(n_samples, n_samples, replace=True)
-            X_bootstrap = X[indices]
-            y_bootstrap = y[indices]
-            tree = DecisionTreeRegressor(max_depth=self.max_depth, min_samples_split=self.min_samples_split, min_samples_leaf=self.min_samples_leaf)
-            tree.fit(X_bootstrap, y_bootstrap)
-            self.trees.append(tree)
-
-    def predict(self, X):
-        predictions = np.zeros((X.shape[0], len(self.trees)))
-        for i, tree in enumerate(self.trees):
-            predictions[:, i] = tree.predict(X)
-        return np.mean(predictions, axis=1)
-
+import pandas as pd
+from scipy import stats
+import time
 class DecisionTreeRegressor:
     def __init__(self, max_depth=None, min_samples_split=2, min_samples_leaf=1):
         self.max_depth = max_depth
@@ -34,55 +9,90 @@ class DecisionTreeRegressor:
         self.min_samples_leaf = min_samples_leaf
 
     def fit(self, X, y):
-        self.tree = self._build_tree(X, y)
+        self.n_features_ = X.shape[1]
+        self.tree_ = self._build_tree(X, y)
 
     def _build_tree(self, X, y, depth=0):
         n_samples, n_features = X.shape
         variance = np.var(y)
 
-        if depth == self.max_depth or n_samples < self.min_samples_split or variance == 0:
-            return np.mean(y)
+        if (self.max_depth is not None and depth >= self.max_depth) or \
+                (self.min_samples_split is not None and n_samples < self.min_samples_split) or \
+                (np.unique(y).size == 1):
+            return {"value": np.mean(y)}
 
-        best_split = None
-        best_gain = -np.inf
+        best_variance_reduction = 0
+        best_feature_idx = None
+        best_threshold = None
         for feature_idx in range(n_features):
-            feature_values = X[:, feature_idx]
-            for threshold in np.unique(feature_values):
-                left_indices = np.where(feature_values <= threshold)[0]
-                right_indices = np.where(feature_values > threshold)[0]
-                if len(left_indices) < self.min_samples_leaf or len(right_indices) < self.min_samples_leaf:
+            thresholds = np.unique(X[:, feature_idx])
+            for threshold in thresholds:
+                left_indices = np.where(X[:, feature_idx] <= threshold)[0]
+                right_indices = np.where(X[:, feature_idx] > threshold)[0]
+
+                if left_indices.size < self.min_samples_leaf or right_indices.size < self.min_samples_leaf:
                     continue
+
                 left_variance = np.var(y[left_indices])
                 right_variance = np.var(y[right_indices])
-                weighted_variance = (len(left_indices) / n_samples) * left_variance + (len(right_indices) / n_samples) * right_variance
-                gain = variance - weighted_variance
-                if gain > best_gain:
-                    best_gain = gain
-                    best_split = (feature_idx, threshold)
+                weighted_variance = (left_variance * len(left_indices) + right_variance * len(right_indices)) / n_samples
+                variance_reduction = variance - weighted_variance
 
-        if best_gain == -np.inf:
-            return np.mean(y)
+                if variance_reduction > best_variance_reduction:
+                    best_variance_reduction = variance_reduction
+                    best_feature_idx = feature_idx
+                    best_threshold = threshold
+                    best_left_indices = left_indices
+                    best_right_indices = right_indices
 
-        feature_idx, threshold = best_split
-        left_indices = np.where(X[:, feature_idx] <= threshold)[0]
-        right_indices = np.where(X[:, feature_idx] > threshold)[0]
-
-        left_subtree = self._build_tree(X[left_indices], y[left_indices], depth + 1)
-        right_subtree = self._build_tree(X[right_indices], y[right_indices], depth + 1)
-
-        return (feature_idx, threshold, left_subtree, right_subtree)
+        if best_variance_reduction > 0:
+            left_subtree = self._build_tree(X[best_left_indices], y[best_left_indices], depth + 1)
+            right_subtree = self._build_tree(X[best_right_indices], y[best_right_indices], depth + 1)
+            return {"feature_idx": best_feature_idx, "threshold": best_threshold,
+                    "left": left_subtree, "right": right_subtree}
+        else:
+            return {"value": np.mean(y)}
 
     def predict(self, X):
-        return np.array([self._predict_tree(x, self.tree) for x in X])
+        X = np.array(X)  # Convert X to NumPy array
+        return np.array([self._predict_tree(x, self.tree_) for x in X])
 
     def _predict_tree(self, x, tree):
-        if isinstance(tree, np.float64):
-            return tree
-        feature_idx, threshold, left_subtree, right_subtree = tree
-        if x[feature_idx] <= threshold:
-            return self._predict_tree(x, left_subtree)
+        if "value" in tree:
+            return tree["value"]
+        feature_value = x[tree["feature_idx"]]
+        if feature_value <= tree["threshold"]:
+            return self._predict_tree(x, tree["left"])
         else:
-            return self._predict_tree(x, right_subtree)
+            return self._predict_tree(x, tree["right"])
+
+class RandomForestRegressor:
+    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.tree_ = []
+
+    def fit(self, X, y):
+        self.tree_ = []
+        for _ in range(self.n_estimators):
+            bootstrap_indices = np.random.choice(len(X), size=len(X), replace=True)
+            X_bootstrap = X[bootstrap_indices]
+            y_bootstrap = y[bootstrap_indices]
+
+            tree = DecisionTreeRegressor(max_depth=self.max_depth,
+                                          min_samples_split=self.min_samples_split,
+                                          min_samples_leaf=self.min_samples_leaf)
+            tree.fit(X_bootstrap, y_bootstrap)
+            self.tree_.append(tree)
+
+    def predict(self, X):
+        X = np.array(X)  # Convert X to NumPy array
+        predictions = np.array([tree.predict(X) for tree in self.tree_])
+        return np.mean(predictions, axis=0)
+
+
 
 
 def calculate_rmse(y_true, y_pred):
@@ -95,46 +105,44 @@ def calculate_rmse(y_true, y_pred):
 
 def main2(k = 41600):
     
-    df = pd.read_csv("data/temp.tsv", sep='\t')
+    # df = pd.read_csv("data/temp.tsv", sep='\t')
+    df_train = pd.read_csv("data/train.tsv", sep='\t')
+    df_test = pd.read_csv("data/test.tsv", sep='\t')
 
-    df.drop_duplicates(inplace=True)
-    df = df[df['Cena'] <= k]
+    df_train.drop_duplicates(inplace=True)
+    df_train.reset_index(drop=True, inplace=True)
 
-    y = df['Cena']
-    df.drop(columns=['Grad', 'Cena'], inplace=True)
+    df_train.drop(columns=['Grad'], inplace=True)
+    df_test.drop(columns=['Grad'], inplace=True)
 
-    categorical_columns = df.select_dtypes(include=object).columns.tolist()
-    numerical_columns = df.select_dtypes(exclude=object).columns.tolist()
-
+    categorical_columns = df_train.select_dtypes(include=object).columns.tolist()
+    numerical_columns = df_train.select_dtypes(exclude=object).columns.tolist()
+    numerical_columns.remove('Cena')
     for column in categorical_columns:
-        df[column] = pd.factorize(df[column])[0]
-
-    df[numerical_columns] = stats.zscore(df[numerical_columns])
+        df_train[column] = pd.factorize(df_train[column])[0]
+        df_test[column] = pd.factorize(df_test[column])[0]
 
     for column in numerical_columns:
-        mean = df[column].mean()
-        std = df[column].std()
-        df[column] = (df[column] - mean) / std
+        mean = df_train[column].mean()
+        std = df_train[column].std()
+        df_train[column] = (df_train[column] - mean) / std
+        df_test[column] = (df_test[column] - mean) / std
 
-    indices = np.arange(len(df))
+    y_train = df_train['Cena']
+    X_train = df_train.drop(columns=['Cena'])
+    y_test = df_test['Cena']
+    X_test = df_test.drop(columns=['Cena'])
 
-    train_size = int(0.8 * len(df))
-    train_indices = indices[:train_size]
-    test_indices = indices[train_size:]
+    print(df_train.shape)
+    print(df_train.columns)
+    print(df_train.head())
 
-    X_train = df.iloc[train_indices]
-    X_test = df.iloc[test_indices]
-    y_train = y.iloc[train_indices]
-    y_test = y.iloc[test_indices]
+    X_train = X_train.values
+    y_train = y_train.values
+    start_time = time.time()
 
-    # print("X_train index:", X_train.index)
-    # print("y_train index:", y_train.index)
-    # print("X_train shape:", X_train.shape)
-    # print("y_train shape:", y_train.shape)
-    # print("Indices:", indices)
-    print(X_train[677:678])
-    print("Indices:", indices)
-    print("Column names:", df.columns)
+# Code you want to time goes here...
+
     model = RandomForestRegressor(n_estimators=364, max_depth=46, min_samples_split=2, min_samples_leaf=2)
     model.fit(X_train, y_train)
 
@@ -142,6 +150,12 @@ def main2(k = 41600):
     
     rmse = calculate_rmse(y_test, y_pred)
     print(rmse)
+
+    end_time = time.time()
+    execution_time = end_time - start_time 
+
+    print(f"Execution time: {execution_time} seconds") 
+
 
 if __name__ == '__main__':
     main2()
@@ -166,73 +180,78 @@ if __name__ == '__main__':
 # import seaborn as sns
 # import matplotlib.pyplot as plt
 # import optuna
+# import pandas as pd
+# import numpy as np
+
 # def main(k=41600):
-    # def objective(trial):
-    #     n_estimators = trial.suggest_int('n_estimators', 100, 1000)
-    #     max_depth = trial.suggest_int('max_depth', 10, 50)
-    #     min_samples_split = trial.suggest_int('min_samples_split', 2, 30)
-    #     min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 20)
+#     def objective(trial):
+#         n_estimators = trial.suggest_int('n_estimators', 100, 1000)
+#         max_depth = trial.suggest_int('max_depth', 10, 50)
+#         min_samples_split = trial.suggest_int('min_samples_split', 2, 30)
+#         min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 20)
         
-    #     model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
-    #                                 min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf)
+#         model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+#                                     min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf)
         
-    #     score = cross_val_score(model, X_train, y_train, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+#         score = cross_val_score(model, X_train, y_train, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
         
-    #     return score.mean()
+#         return score.mean()
 
-    # df = pd.read_csv("data/temp.tsv", sep='\t')
+#     df = pd.read_csv("data/temp.tsv", sep='\t')
 
-    # Pogledaj
-    # df.head()
-    # df.tail()
-    # df.info()
+#     # Pogledaj
+#     df.head()
+#     df.tail()
+#     df.info()
 
-    # df.drop_duplicates(inplace=True)
-    # df = df[df['Cena'] <= k]
+#     df.drop_duplicates(inplace=True)
+#     df = df[df['Cena'] <= k]
 
-    # y = df['Cena']
-    # df.drop(columns=['Grad', 'Cena'], inplace=True)
+#     y = df['Cena']
+#     df.drop(columns=['Grad', 'Cena'], inplace=True)
 
-    # categorical_columns = df.select_dtypes(include=object).columns.tolist()
-    # numerical_columns = df.select_dtypes(exclude=object).columns.tolist()
+#     categorical_columns = df.select_dtypes(include=object).columns.tolist()
+#     numerical_columns = df.select_dtypes(exclude=object).columns.tolist()
 
-    # label_encoder = LabelEncoder()
-    # for column in categorical_columns:
-    #     df[column] = label_encoder.fit_transform(df[column])
+#     label_encoder = LabelEncoder()
+#     for column in categorical_columns:
+#         df[column] = label_encoder.fit_transform(df[column])
 
-    # scaler = StandardScaler()
-    # df[numerical_columns] = scaler.fit_transform(df[numerical_columns])
+#     scaler = StandardScaler()
+#     df[numerical_columns] = scaler.fit_transform(df[numerical_columns])
 
-    # print(categorical_columns)
-    # print(numerical_columns)
-    # X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=0.2, random_state=42)
 
-    # study = optuna.create_study(direction='maximize', sampler=optuna.samplers.RandomSampler(seed=42))
-    # study.optimize(objective, n_trials=250)
-    # print(study.best_params)
-    # best_params = study.best_params
-    # optuna.visualization.plot_optimization_history(study)
-    # optuna.visualization.plot_slice(study, params=['n_estimators', 'max_depth', 'min_samples_split', 'min_samples_leaf'])
+#     print(categorical_columns)
+#     print(numerical_columns)
+#     X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=0.2, random_state=42)
 
-    # best_model = RandomForestRegressor(n_estimators=364, max_depth=46, 
-    #                                 min_samples_split=2, min_samples_leaf=2)
-    # best_model.fit(X_train, y_train)
+#     # study = optuna.create_study(direction='maximize', sampler=optuna.samplers.RandomSampler(seed=42))
+#     # study.optimize(objective, n_trials=250)
+#     # print(study.best_params)
+#     # best_params = study.best_params
+#     # optuna.visualization.plot_optimization_history(study)
+#     # optuna.visualization.plot_slice(study, params=['n_estimators', 'max_depth', 'min_samples_split', 'min_samples_leaf'])
 
-    # print(best_model.score(X_train, y_train))
+#     best_model = RandomForestRegressor(n_estimators=364, max_depth=46, 
+#                                     min_samples_split=2, min_samples_leaf=2)
+#     best_model.fit(X_train, y_train)
 
-    # y_pred = best_model.predict(X_test)
-    # rmse = calculate_rmse(y_test, y_pred)
-    # print(f'Mean Squared Error: {rmse}')
-    # return rmse
+#     print(best_model.score(X_train, y_train))
+
+#     y_pred = best_model.predict(X_test)
+#     rmse = calculate_rmse(y_test, y_pred)
+#     print(f'Mean Squared Error: {rmse}')
+#     return rmse
 
 
 # if __name__ == '__main__':
-    # temp = {}
-    # for i in range(40000, 45000, 200):
-    #     mse = main(i)
-    #     temp[i] = mse
+#     # temp = {}
+#     # for i in range(40000, 45000, 200):
+#     mse = main(41600)
+#     print(mse)
+#     # temp[i] = mse
         
-    # sorted_data = sorted(temp.items(), key=lambda x: x[1])
-    # min_key = sorted_data[0][0]
+#     # sorted_data = sorted(temp.items(), key=lambda x: x[1])
+#     # min_key = sorted_data[0][0]
 
-    # print("Min key:", min_key, "\tRMSE:", temp[min_key])
+#     # print("Min key:", min_key, "\tRMSE:", temp[min_key])
