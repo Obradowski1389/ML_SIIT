@@ -5,12 +5,11 @@ from sklearn.metrics import v_measure_score
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import GridSearchCV, train_test_split
 
-numerical_feature = ['Population','GDP per Capita','Urban Population','Life Expectancy','Surface Area','Literacy Rate']
+numerical_feature = ['Population', 'GDP per Capita', 'Urban Population', 'Life Expectancy', 'Surface Area', 'Literacy Rate']
 
 def load_data(train, test):
     train_data = pd.read_csv(train)
     test_data = pd.read_csv(test)
-
     return train_data, test_data
 
 def main(train, test):
@@ -18,21 +17,21 @@ def main(train, test):
 
     imputer = KNNImputer()
     train_data[numerical_feature] = imputer.fit_transform(train_data[numerical_feature])
-    
-    # TODO: delete
     test_data[numerical_feature] = imputer.transform(test_data[numerical_feature])
     
     clusters = pd.concat([train_data['region'], test_data['region']]).unique()
-
+    n_clusters = len(clusters)
+    
     y = train_data['region']
-    X = train_data.drop(['region','Year'], axis=1)
+    X = train_data.drop(['region', 'Year'], axis=1)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    gmm = GaussianMixture(n_components=len(clusters))
-
+    gmm = GaussianMixture()
+# 0.28
     param_grid = {
+        'n_components': range(1, n_clusters + 10),  # Explore different number of clusters
         'random_state': [0, 1, 2, 3, 7, 20, 42],
-        'init_params': ['random', 'kmeans', 'random_from_data', 'k-means++'],
+        'init_params': ['kmeans', 'random'],
         'covariance_type': ['full', 'tied', 'diag', 'spherical'],
         'max_iter': [100, 200, 300, 400, 500],
     }
@@ -51,17 +50,12 @@ def main(train, test):
     v_measure = v_measure_score(y_val, y_val_pred)
     print(f'V Measure Score on Validation Set: {v_measure}')
 
-
-    # gmm.fit(X)
-
     y_test = test_data['region']
-    X_test = test_data.drop(['region','Year'], axis=1)
-
+    X_test = test_data.drop(['region', 'Year'], axis=1)
     predictions = best_model.predict(X_test)
 
     v_measure = v_measure_score(y_test, predictions)
     print(f'V Measure Score on Test Set: {v_measure}')
-    # print(v_measure)
 
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2])
