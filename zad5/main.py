@@ -3,9 +3,8 @@ import pandas as pd
 from sklearn.impute import KNNImputer
 from sklearn.metrics import v_measure_score
 from sklearn.mixture import GaussianMixture
-from sklearn.model_selection import GridSearchCV, train_test_split
 
-numerical_feature = ['Population','GDP per Capita','Urban Population','Life Expectancy','Surface Area','Literacy Rate']
+numerical_feature = ['Population','GDP per Capita','Urban Population','Life Expectancy','Surface Area']
 
 def load_data(train, test):
     train_data = pd.read_csv(train)
@@ -25,14 +24,14 @@ def main(train, test):
     clusters = pd.concat([train_data['region'], test_data['region']]).unique()
 
     y = train_data['region']
-    X = train_data.drop(['region','Year'], axis=1)
+    X = train_data.drop(['region','Year', 'Literacy Rate'], axis=1)
     
     gmm = GaussianMixture(n_components=len(clusters), random_state=7, init_params='random', covariance_type='diag')
 
     gmm.fit(X)
 
     y_test = test_data['region']
-    X_test = test_data.drop(['region','Year'], axis=1)
+    X_test = test_data.drop(['region','Year', 'Literacy Rate'], axis=1)
 
     predictions = gmm.predict(X_test)
 
